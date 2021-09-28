@@ -55,6 +55,9 @@ class SpaceDirectoryViewModel @AssistedInject constructor(
     }
 
     companion object : MvRxViewModelFactory<SpaceDirectoryViewModel, SpaceDirectoryState> {
+
+        private const val PAGE_LENGTH = 10
+
         override fun create(viewModelContext: ViewModelContext, state: SpaceDirectoryState): SpaceDirectoryViewModel? {
             val factory = when (viewModelContext) {
                 is FragmentViewModelContext -> viewModelContext.fragment as? Factory
@@ -78,6 +81,27 @@ class SpaceDirectoryViewModel @AssistedInject constructor(
         observeJoinedRooms()
         observeMembershipChanges()
         observePermissions()
+        observeKnownSummaries()
+    }
+
+    private fun observeKnownSummaries() {
+        // A we prefer to use known summaries to have better name resolution
+        // it's important to have them up to date. Particularly after creation where
+        // resolved name is sometimes just "New Room"
+        session.rx().liveRoomSummaries(
+                roomSummaryQueryParams {
+                    memberships = listOf(Membership.JOIN)
+                    includeType = null
+                }
+        ).execute {
+            val updatedRoomSummaries = it
+            copy(
+                    knownRoomSummaries = this.knownRoomSummaries.map { rs ->
+                        updatedRoomSummaries.invoke()?.firstOrNull { it.roomId == rs.roomId }
+                                ?: rs
+                    }
+            )
+        }
     }
 
     private fun observePermissions() {
@@ -110,7 +134,7 @@ class SpaceDirectoryViewModel @AssistedInject constructor(
             try {
                 val query = session.spaceService().querySpaceChildren(
                         spaceId,
-                        limit = 10
+                        limit = PAGE_LENGTH
                 )
                 val knownSummaries = query.children.mapNotNull {
                     session.getRoomSummary(it.childRoomId)
@@ -189,8 +213,16 @@ class SpaceDirectoryViewModel @AssistedInject constructor(
             SpaceDirectoryViewAction.Retry                       -> {
                 handleRetry()
             }
+            is SpaceDirectoryViewAction.RefreshUntilFound        -> {
+                handleRefreshUntilFound(action.roomIdToFind)
+            }
             SpaceDirectoryViewAction.LoadAdditionalItemsIfNeeded -> {
                 loadAdditionalItemsIfNeeded()
+            }
+            is SpaceDirectoryViewAction.CreateNewRoom            -> {
+                withState { state ->
+                    _viewEvents.post(SpaceDirectoryViewEvents.NavigateToCreateNewRoom(state.currentRootSummary?.roomId ?: initialState.spaceId))
+                }
             }
         }
     }
@@ -213,6 +245,66 @@ class SpaceDirectoryViewModel @AssistedInject constructor(
 
     private fun handleRetry() = withState { state ->
         refreshFromApi(state.hierarchyStack.lastOrNull() ?: initialState.spaceId)
+    }
+
+    private fun handleRefreshUntilFound(roomIdToFind: String?) = withState { state ->
+        val currentRootId = state.hierarchyStack.lastOrNull() ?: initialState.spaceId
+
+        val mutablePaginationStatus = state.paginationStatus.toMutableMap().apply {
+            this[currentRootId] = Loading()
+        }
+
+        // mark as paginating
+        setState {
+            copy(
+                    paginationStatus = mutablePaginationStatus
+            )
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            var query = session.spaceService().querySpaceChildren(
+                    currentRootId,
+                    limit = PAGE_LENGTH
+            )
+
+            var knownSummaries = query.children.mapNotNull {
+                session.getRoomSummary(it.childRoomId)
+                        ?.takeIf { it.membership == Membership.JOIN } // only take if joined because it will be up to date (synced)
+            }.distinctBy { it.roomId }
+
+            while (!query.children.any { it.childRoomId == roomIdToFind } && query.nextToken != null) {
+                // continue to paginate until found
+                val paginate = session.spaceService().querySpaceChildren(
+                        currentRootId,
+                        limit = PAGE_LENGTH,
+                        from = query.nextToken,
+                        knownStateList = query.childrenState
+                )
+
+                knownSummaries = (
+                        knownSummaries
+                                + (paginate.children.mapNotNull {
+                            session.getRoomSummary(it.childRoomId)
+                                    ?.takeIf { it.membership == Membership.JOIN } // only take if joined because it will be up to date (synced)
+                        })
+                        ).distinctBy { it.roomId }
+
+                query = query.copy(
+                        children = query.children + paginate.children,
+                        nextToken = paginate.nextToken
+                )
+            }
+
+            setState {
+                copy(
+                        apiResults = this.apiResults.toMutableMap().apply {
+                            this[currentRootId] = Success(query)
+                        },
+                        paginationStatus = this.paginationStatus.toMutableMap().apply { this[currentRootId] = Success(Unit) }.toMap(),
+                        knownRoomSummaries = (state.knownRoomSummaries + knownSummaries).distinctBy { it.roomId },
+                )
+            }
+        }
     }
 
     private fun handleExploreSubSpace(action: SpaceDirectoryViewAction.ExploreSubSpace) = withState { state ->
@@ -260,7 +352,9 @@ class SpaceDirectoryViewModel @AssistedInject constructor(
         if (mutablePaginationStatus[currentRootId] is Loading) return@withState
 
         setState {
-            copy(paginationStatus = mutablePaginationStatus.toMap())
+            copy(paginationStatus = mutablePaginationStatus.apply {
+                this[currentRootId] = Loading()
+            })
         }
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -276,7 +370,7 @@ class SpaceDirectoryViewModel @AssistedInject constructor(
                 }
                 val query = session.spaceService().querySpaceChildren(
                         currentRootId,
-                        limit = 10,
+                        limit = PAGE_LENGTH,
                         from = currentResponse.nextToken,
                         knownStateList = currentResponse.childrenState
                 )

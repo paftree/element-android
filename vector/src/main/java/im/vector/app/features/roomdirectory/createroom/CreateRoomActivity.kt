@@ -16,9 +16,11 @@
 
 package im.vector.app.features.roomdirectory.createroom
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import com.airbnb.mvrx.MvRx
 import com.google.android.material.appbar.MaterialToolbar
 import im.vector.app.R
 import im.vector.app.core.di.ScreenComponent
@@ -50,13 +52,11 @@ class CreateRoomActivity : VectorBaseActivity<ActivitySimpleBinding>(), ToolbarC
 
     override fun initUiAndData() {
         if (isFirstCreation()) {
+            val fragmentArgs: CreateRoomArgs = intent?.extras?.getParcelable(MvRx.KEY_ARG) ?: return
             addFragment(
                     R.id.simpleFragmentContainer,
                     CreateRoomFragment::class.java,
-                    CreateRoomArgs(
-                            intent?.getStringExtra(INITIAL_NAME) ?: "",
-                            isSpace = intent?.getBooleanExtra(IS_SPACE, false) ?: false
-                    )
+                    fragmentArgs
             )
         }
     }
@@ -69,20 +69,35 @@ class CreateRoomActivity : VectorBaseActivity<ActivitySimpleBinding>(), ToolbarC
                 .subscribe { sharedAction ->
                     when (sharedAction) {
                         is RoomDirectorySharedAction.Back,
-                        is RoomDirectorySharedAction.Close -> finish()
+                        is RoomDirectorySharedAction.Close             -> finish()
+                        is RoomDirectorySharedAction.CreateRoomSuccess -> {
+                            setResult(Activity.RESULT_OK, Intent().apply { putExtra(RESULT_CREATED_ROOM_ID, sharedAction.createdRoomId) })
+                            finish()
+                        }
+                        else                                           -> {
+                            // nop
+                        }
                     }
                 }
                 .disposeOnDestroy()
     }
 
     companion object {
-        private const val INITIAL_NAME = "INITIAL_NAME"
-        private const val IS_SPACE = "IS_SPACE"
 
-        fun getIntent(context: Context, initialName: String = "", isSpace: Boolean = false): Intent {
+        const val RESULT_CREATED_ROOM_ID = "RESULT_CREATED_ROOM_ID"
+
+        fun getIntent(context: Context,
+                      initialName: String = "",
+                      isSpace: Boolean = false,
+                      openAfterCreate: Boolean = true,
+                      currentSpaceId: String? = null): Intent {
             return Intent(context, CreateRoomActivity::class.java).apply {
-                putExtra(INITIAL_NAME, initialName)
-                putExtra(IS_SPACE, isSpace)
+                putExtra(MvRx.KEY_ARG, CreateRoomArgs(
+                        initialName = initialName,
+                        isSpace = isSpace,
+                        openAfterCreate = openAfterCreate,
+                        parentSpaceId = currentSpaceId
+                ))
             }
         }
     }

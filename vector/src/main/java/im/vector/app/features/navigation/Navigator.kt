@@ -70,7 +70,7 @@ interface Navigator {
 
     fun openMatrixToBottomSheet(context: Context, link: String)
 
-    fun openCreateRoom(context: Context, initialName: String = "")
+    fun openCreateRoom(context: Context, initialName: String = "", openAfterCreate: Boolean = true)
 
     fun openCreateDirectRoom(context: Context)
 

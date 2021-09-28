@@ -16,6 +16,7 @@
 
 package im.vector.app.features.spaces
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -26,12 +27,15 @@ import com.airbnb.mvrx.viewModel
 import im.vector.app.R
 import im.vector.app.core.di.ScreenComponent
 import im.vector.app.core.extensions.commitTransaction
+import im.vector.app.core.extensions.registerStartForActivityResult
 import im.vector.app.core.platform.VectorBaseActivity
 import im.vector.app.databinding.ActivitySimpleBinding
 import im.vector.app.features.matrixto.MatrixToBottomSheet
+import im.vector.app.features.roomdirectory.createroom.CreateRoomActivity
 import im.vector.app.features.spaces.explore.SpaceDirectoryArgs
 import im.vector.app.features.spaces.explore.SpaceDirectoryFragment
 import im.vector.app.features.spaces.explore.SpaceDirectoryState
+import im.vector.app.features.spaces.explore.SpaceDirectoryViewAction
 import im.vector.app.features.spaces.explore.SpaceDirectoryViewEvents
 import im.vector.app.features.spaces.explore.SpaceDirectoryViewModel
 import javax.inject.Inject
@@ -49,6 +53,15 @@ class SpaceExploreActivity : VectorBaseActivity<ActivitySimpleBinding>(), SpaceD
     override fun getTitleRes(): Int = R.string.space_explore_activity_title
 
     val sharedViewModel: SpaceDirectoryViewModel by viewModel()
+
+    private val createRoomResultLauncher = registerStartForActivityResult { activityResult ->
+        if (activityResult.resultCode == Activity.RESULT_OK) {
+            activityResult.data?.extras?.getString(CreateRoomActivity.RESULT_CREATED_ROOM_ID)?.let {
+                // we want to refresh from API
+                sharedViewModel.handle(SpaceDirectoryViewAction.RefreshUntilFound(it))
+            }
+        }
+    }
 
     private val fragmentLifecycleCallbacks = object : FragmentManager.FragmentLifecycleCallbacks() {
         override fun onFragmentAttached(fm: FragmentManager, f: Fragment, context: Context) {
@@ -86,14 +99,21 @@ class SpaceExploreActivity : VectorBaseActivity<ActivitySimpleBinding>(), SpaceD
 
         sharedViewModel.observeViewEvents {
             when (it) {
-                SpaceDirectoryViewEvents.Dismiss -> {
+                SpaceDirectoryViewEvents.Dismiss                      -> {
                     finish()
                 }
-                is SpaceDirectoryViewEvents.NavigateToRoom -> {
+                is SpaceDirectoryViewEvents.NavigateToRoom            -> {
                     navigator.openRoom(this, it.roomId)
                 }
                 is SpaceDirectoryViewEvents.NavigateToMxToBottomSheet -> {
                     MatrixToBottomSheet.withLink(it.link, this).show(supportFragmentManager, "ShowChild")
+                }
+                is SpaceDirectoryViewEvents.NavigateToCreateNewRoom   -> {
+                    createRoomResultLauncher.launch(CreateRoomActivity.getIntent(
+                            this,
+                            openAfterCreate = false,
+                            currentSpaceId = it.currentSpaceId
+                    ))
                 }
             }
         }
