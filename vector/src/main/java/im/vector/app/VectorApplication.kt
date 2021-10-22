@@ -99,6 +99,7 @@ class VectorApplication :
     @Inject lateinit var pinLocker: PinLocker
     @Inject lateinit var callManager: WebRtcCallManager
     @Inject lateinit var invitesAcceptor: InvitesAcceptor
+    @Inject lateinit var autoRageShaker: AutoRageShaker
 
     lateinit var vectorComponent: VectorComponent
 
@@ -121,6 +122,7 @@ class VectorApplication :
         vectorComponent = DaggerVectorComponent.factory().create(this)
         vectorComponent.inject(this)
         invitesAcceptor.initialize()
+        autoRageShaker.initialize()
         vectorUncaughtExceptionHandler.activate(this)
         rxConfig.setupRxPlugin()
 

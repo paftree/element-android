@@ -155,6 +155,7 @@ class VectorPreferences @Inject constructor(private val context: Context) {
         const val SETTINGS_LABS_ALLOW_EXTENDED_LOGS = "SETTINGS_LABS_ALLOW_EXTENDED_LOGS"
         const val SETTINGS_LABS_USE_RESTRICTED_JOIN_RULE = "SETTINGS_LABS_USE_RESTRICTED_JOIN_RULE"
         const val SETTINGS_LABS_SPACES_HOME_AS_ORPHAN = "SETTINGS_LABS_SPACES_HOME_AS_ORPHAN"
+        const val SETTINGS_LABS_AUTO_REPORT_UISI = "SETTINGS_LABS_AUTO_REPORT_UISI"
         const val SETTINGS_PREF_SPACE_SHOW_ALL_ROOM_IN_HOME = "SETTINGS_PREF_SPACE_SHOW_ALL_ROOM_IN_HOME"
 
         private const val SETTINGS_DEVELOPER_MODE_PREFERENCE_KEY = "SETTINGS_DEVELOPER_MODE_PREFERENCE_KEY"
@@ -249,7 +250,7 @@ class VectorPreferences @Inject constructor(private val context: Context) {
                 SETTINGS_DEVELOPER_MODE_PREFERENCE_KEY,
                 SETTINGS_LABS_SHOW_HIDDEN_EVENTS_PREFERENCE_KEY,
                 SETTINGS_LABS_ALLOW_EXTENDED_LOGS,
-                SETTINGS_LABS_USE_RESTRICTED_JOIN_RULE,
+//                SETTINGS_LABS_USE_RESTRICTED_JOIN_RULE,
                 SETTINGS_DEVELOPER_MODE_FAIL_FAST_PREFERENCE_KEY,
 
                 SETTINGS_USE_RAGE_SHAKE_KEY,
@@ -992,6 +993,10 @@ class VectorPreferences @Inject constructor(private val context: Context) {
 
     private fun labsSpacesOnlyOrphansInHome(): Boolean {
         return defaultPrefs.getBoolean(SETTINGS_LABS_SPACES_HOME_AS_ORPHAN, false)
+    }
+
+    fun labsAutoReportUISI(): Boolean {
+        return defaultPrefs.getBoolean(SETTINGS_LABS_AUTO_REPORT_UISI, false)
     }
 
     fun prefSpacesShowAllRoomInHome(): Boolean {
